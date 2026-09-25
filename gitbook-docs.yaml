@@ -1,0 +1,12 @@
+$schema: https://api.gitbook.com/gitbook-docs.yaml
+version: 1
+site:
+  title: Docker & Kubernetes from Scratch
+  structure:
+    - type: space
+      key: space-course
+      title: Docker & Kubernetes from Scratch
+      path: course
+      default: true
+      content:
+        directory: ./
