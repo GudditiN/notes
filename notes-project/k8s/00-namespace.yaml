@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: notes
+  labels:
+    pod-security.kubernetes.io/enforce: baseline     # postgres image needs baseline
+    pod-security.kubernetes.io/warn: restricted      # warns about anything not restricted-ready

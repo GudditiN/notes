@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: notes
+      POSTGRES_USER: notes
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes -d notes"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./app
+    image: notes-api:1.0.0
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: compose
+      LOG_LEVEL: info
+      GREETING: hello from docker compose
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: notes
+      DB_USER: notes
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true                 # same hardening you'll use in Kubernetes
+    tmpfs:
+      - /tmp
+    user: "10001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:

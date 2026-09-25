@@ -1,0 +1,48 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: notes-api
+  namespace: notes
+  labels:
+    release: monitoring                   # matches the kube-prometheus-stack release name
+spec:
+  selector:
+    matchLabels: { app: notes-api }
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: notes-api
+  namespace: notes
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: notes-api
+      rules:
+        - alert: NotesApiHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{job="notes-api",status=~"5.."}[5m]))
+              / clamp_min(sum(rate(http_requests_total{job="notes-api"}[5m])), 1e-9) > 0.05
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "notes-api 5xx rate above 5%"
+        - alert: NotesApiPodRestarting
+          expr: increase(kube_pod_container_status_restarts_total{namespace="notes"}[15m]) > 3
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "{{ $labels.pod }} restarted more than 3 times in 15 minutes"
+        - alert: NotesApiAtMaxReplicas
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace="notes"}
+              >= kube_horizontalpodautoscaler_spec_max_replicas{namespace="notes"}
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "HPA has been at max replicas for 15 minutes; raise the limit or add capacity"

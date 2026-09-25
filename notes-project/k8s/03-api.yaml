@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notes-api
+  namespace: notes
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notes-api
+  namespace: notes
+  labels: { app: notes-api }
+spec:
+  # no "replicas" field: the HPA owns the count (Module 20)
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels: { app: notes-api }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels: { app: notes-api }
+    spec:
+      serviceAccountName: notes-api
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: { matchLabels: { app: notes-api } }
+      containers:
+        - name: api
+          image: notes-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8000 }
+          envFrom:
+            - configMapRef: { name: notes-config }
+            - secretRef:    { name: notes-db }          # DB_USER, DB_PASSWORD
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "5"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notes-api
+  namespace: notes
+  labels: { app: notes-api }
+spec:
+  selector: { app: notes-api }
+  ports:
+    - name: http              # named: the ServiceMonitor refers to it
+      port: 80
+      targetPort: http
